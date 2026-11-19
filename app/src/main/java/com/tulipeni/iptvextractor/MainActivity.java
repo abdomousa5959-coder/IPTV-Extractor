@@ -77,7 +77,7 @@ public class MainActivity extends Activity {
                 int code=c.getResponseCode();InputStream in=code>=200&&code<300?c.getInputStream():c.getErrorStream();String body=read(in);c.disconnect();
                 if(code<200||code>=300)throw new IOException("HTTP "+code+" — "+body.substring(0,Math.min(160,body.length())));
                 ArrayList<Channel> parsed=parse(body);
-                runOnUiThread(()->{playlist=body;channels.clear();channels.addAll(parsed);progress.setVisibility(View.GONE);status.setText(parsed.isEmpty()?"تم التحميل لكن لم يتم العثور على قنوات M3U.":"تم استخراج القائمة بنجاح.");render(search.getText().toString());});
+                runOnUiThread(()->{playlist=body.trim().startsWith("{")?toM3u(parsed):body;channels.clear();channels.addAll(parsed);progress.setVisibility(View.GONE);status.setText(parsed.isEmpty()?"تم التحميل لكن لم يتم العثور على قنوات M3U.":"تم استخراج القائمة بنجاح.");render(search.getText().toString());});
             }catch(Exception e){runOnUiThread(()->{progress.setVisibility(View.GONE);status.setText("فشل الاستخراج: "+e.getMessage());});}
         });
     }
@@ -115,29 +115,25 @@ public class MainActivity extends Activity {
         }return b.toString();
     }
     void play(Channel ch){
-        if(ch.url==null||ch.url.isEmpty()){Toast.makeText(this,"لا يوجد رابط تشغيل لهذا العنصر",Toast.LENGTH_SHORT).show();return;}
-        try{
-            Intent vlc=new Intent(Intent.ACTION_VIEW);
-            vlc.setPackage("org.videolan.vlc");
-            vlc.setDataAndType(Uri.parse(ch.url),"video/*");
-            if(!ch.agent.isEmpty())vlc.putExtra("extra_headers","User-Agent: "+ch.agent.replace("#EXTVLCOPT:http-user-agent=","").trim());
-            if(vlc.resolveActivity(getPackageManager())!=null){startActivity(vlc);return;}
-            Intent generic=new Intent(Intent.ACTION_VIEW);
-            generic.setDataAndType(Uri.parse(ch.url),"application/x-mpegURL");
-            if(generic.resolveActivity(getPackageManager())!=null)startActivity(generic);
-            else Toast.makeText(this,"ثبت مشغل فيديو يدعم HLS مثل VLC",Toast.LENGTH_LONG).show();
-        }catch(Exception e){Toast.makeText(this,"تعذر فتح البث: "+e.getMessage(),Toast.LENGTH_LONG).show();}
+        if(ch.url==null||ch.url.trim().isEmpty()){Toast.makeText(this,"لا يوجد رابط تشغيل لهذا العنصر",Toast.LENGTH_SHORT).show();return;}
+        Intent i=new Intent(this,PlayerActivity.class);
+        i.putExtra("url",ch.url);i.putExtra("title",ch.name);
+        i.putExtra("user_agent",ch.agent==null?"":ch.agent.replace("#EXTVLCOPT:http-user-agent=","").trim());
+        startActivity(i);
     }
     String read(InputStream in)throws IOException{
         if(in==null)return "";ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);return new String(out.toByteArray(),StandardCharsets.UTF_8);
     }
-    ArrayList<Channel> parse(String body){
-        ArrayList<Channel> out=new ArrayList<>();String name="قناة غير مسماة",group="غير مصنف",logo="";
-        for(String raw:body.replace("\uFEFF","").split("\\r?\\n")){
+    ArrayList<Channel> parse(String body)throws Exception{
+        String clean=body.replace("\\uFEFF","").trim();
+        if(clean.startsWith("{"))return parseJson(clean);
+        ArrayList<Channel> out=new ArrayList<>();String name="قناة غير مسماة",group="غير مصنف",logo="",agent="";
+        for(String raw:clean.split("\\r?\\n")){
             String line=raw.trim();if(line.isEmpty())continue;
             if(line.startsWith("#EXTINF")){int comma=line.lastIndexOf(',');name=comma>=0&&comma<line.length()-1?line.substring(comma+1).trim():"قناة غير مسماة";group=attr(line,"group-title");logo=attr(line,"tvg-logo");}
             else if(line.startsWith("#EXTGRP:"))group=line.substring(8).trim();
-            else if(!line.startsWith("#")){out.add(new Channel(name,group.isEmpty()?"غير مصنف":group,logo,line));name="قناة غير مسماة";group="غير مصنف";logo="";}
+            else if(line.startsWith("#EXTVLCOPT:http-user-agent="))agent=line.substring(line.indexOf('=')+1).trim();
+            else if(!line.startsWith("#")){out.add(new Channel(name,group.isEmpty()?"غير مصنف":group,logo,line,"","M3U","","","",agent));name="قناة غير مسماة";group="غير مصنف";logo="";agent="";}
         }return out;
     }
     String attr(String line,String key){
