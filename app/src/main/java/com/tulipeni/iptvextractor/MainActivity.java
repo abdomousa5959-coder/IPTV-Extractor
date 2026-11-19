@@ -2,7 +2,8 @@ package com.tulipeni.iptvextractor;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.content.*;\nimport android.net.Uri;
+import android.content.*;
+import android.net.Uri;
 import android.graphics.Color;
 import android.view.Gravity;
 import android.view.View;
@@ -12,7 +13,8 @@ import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.*;\nimport org.json.*;
+import java.util.concurrent.*;
+import org.json.*;
 
 public class MainActivity extends Activity {
     private static final String DEFAULT_URL="https://go8knm.optikl.ink/Os/api.php?action=category&cat_id=1";
