@@ -97,16 +97,16 @@ public class MainActivity extends Activity {
         return out;
     }
     String toM3u(ArrayList<Channel> items){
-        StringBuilder b=new StringBuilder("#EXTM3U\\n");
+        StringBuilder b=new StringBuilder("#EXTM3U\n");
         for(Channel ch:items){
             b.append("#EXTINF:-1");
-            if(!ch.logo.isEmpty())b.append(" tvg-logo=\\\"").append(ch.logo).append("\\\"");
-            b.append(" group-title=\\\"").append(ch.group.replace("\\\"","")).append("\\\"").append(",").append(ch.name).append("\\n");
+            if(!ch.logo.isEmpty())b.append(" tvg-logo=\"").append(ch.logo).append("\"");
+            b.append(" group-title=\"").append(ch.group.replace("\"","")).append("\"").append(",").append(ch.name).append("\n");
             if(!ch.agent.isEmpty()){
                 String ua=ch.agent.replace("#EXTVLCOPT:http-user-agent=","").trim();
-                if(!ua.isEmpty())b.append("#EXTVLCOPT:http-user-agent=").append(ua).append("\\n");
+                if(!ua.isEmpty())b.append("#EXTVLCOPT:http-user-agent=").append(ua).append("\n");
             }
-            b.append(ch.url).append("\\n");
+            b.append(ch.url).append("\n");
         }return b.toString();
     }
     void play(Channel ch){
