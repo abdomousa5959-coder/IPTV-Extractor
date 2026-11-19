@@ -26,8 +26,11 @@ public class MainActivity extends Activity {
     private String playlist="";
     private final ArrayList<Channel> channels=new ArrayList<>();
     static class Channel {
-        String name,group,logo,url;
-        Channel(String n,String g,String l,String u){name=n;group=g;logo=l;url=u;}
+        String name,group,logo,url,id,type,download,player,ddx,agent;
+        Channel(String n,String g,String l,String u){this(n,g,l,u,"","","","","","");}
+        Channel(String n,String g,String l,String u,String i,String t,String d,String p,String x,String a){
+            name=n;group=g;logo=l;url=u;id=i;type=t;download=d;player=p;ddx=x;agent=a;
+        }
     }
     public void onCreate(Bundle b){
         super.onCreate(b);
