@@ -1,56 +1,69 @@
 package com.tulipeni.iptvextractor;
+
 import android.app.Activity;
 import android.os.Bundle;
 import android.graphics.Color;
+import android.net.Uri;
+import android.view.Gravity;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
 import android.widget.*;
-import android.net.Uri;
-import androidx.media3.common.MediaItem;
-import androidx.media3.common.MimeTypes;
-import androidx.media3.common.PlaybackException;
-import androidx.media3.common.Player;
-import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
-import androidx.media3.datasource.DefaultHttpDataSource;
-import androidx.media3.ui.PlayerView;
+import android.media.MediaPlayer;
+import java.util.HashMap;
+import java.util.Map;
 
-public class PlayerActivity extends Activity {
-    private ExoPlayer player;
-    private PlayerView playerView;
-    private TextView error;
+public class PlayerActivity extends Activity implements SurfaceHolder.Callback {
+    private MediaPlayer media;
+    private SurfaceView surface;
+    private ProgressBar loading;
+    private TextView state;
+    private Button playPause;
     private String streamUrl="", userAgent="";
-    private int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+.5f);}
-    @Override public void onCreate(Bundle state){
-        super.onCreate(state);
+    private boolean prepared=false, surfaceReady=false, shouldPlay=true;
+    private int dp(int v){return (int)(v*getResources().getDisplayMetrics().density+.5f);}
+    @Override public void onCreate(Bundle saved){
+        super.onCreate(saved);
         getWindow().setStatusBarColor(Color.BLACK);getWindow().setNavigationBarColor(Color.BLACK);
         streamUrl=getIntent().getStringExtra("url");userAgent=getIntent().getStringExtra("user_agent");
         if(streamUrl==null||streamUrl.trim().isEmpty()){finish();return;}
         LinearLayout root=new LinearLayout(this);root.setOrientation(1);root.setBackgroundColor(Color.BLACK);
-        TextView title=new TextView(this);title.setText(getIntent().getStringExtra("title"));title.setTextColor(Color.WHITE);title.setTextSize(16);title.setPadding(dp(16),dp(12),dp(16),dp(12));root.addView(title);
-        playerView=new PlayerView(this);playerView.setUseController(true);playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS);
-        root.addView(playerView,new LinearLayout.LayoutParams(-1,0,1));
-        error=new TextView(this);error.setTextColor(0xffff7777);error.setTextSize(13);error.setPadding(dp(14),dp(8),dp(14),dp(8));error.setVisibility(View.GONE);root.addView(error);
-        setContentView(root);initializePlayer();
+        TextView title=new TextView(this);title.setText(getIntent().getStringExtra("title"));title.setTextColor(Color.WHITE);title.setTextSize(17);title.setPadding(dp(16),dp(14),dp(16),dp(14));root.addView(title);
+        FrameLayout frame=new FrameLayout(this);frame.setBackgroundColor(Color.BLACK);
+        surface=new SurfaceView(this);surface.getHolder().addCallback(this);
+        frame.addView(surface,new FrameLayout.LayoutParams(-1,-1));
+        loading=new ProgressBar(this);FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(-2,-2,Gravity.CENTER);frame.addView(loading,lp);
+        root.addView(frame,new LinearLayout.LayoutParams(-1,0,1));
+        state=new TextView(this);state.setText("جاري تجهيز البث...");state.setTextColor(0xffb9c7bf);state.setPadding(dp(14),dp(8),dp(14),dp(8));root.addView(state);
+        LinearLayout controls=new LinearLayout(this);controls.setGravity(Gravity.CENTER);controls.setPadding(dp(12),dp(6),dp(12),dp(16));
+        playPause=new Button(this);playPause.setText("إيقاف مؤقت");playPause.setEnabled(false);
+        Button retry=new Button(this);retry.setText("إعادة المحاولة");
+        controls.addView(playPause,new LinearLayout.LayoutParams(0,dp(48),1));
+        LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,dp(48),1);rp.leftMargin=dp(8);controls.addView(retry,rp);
+        root.addView(controls);setContentView(root);
+        playPause.setOnClickListener(v->{if(media==null||!prepared)return;if(media.isPlaying()){media.pause();shouldPlay=false;playPause.setText("تشغيل");}else{media.start();shouldPlay=true;playPause.setText("إيقاف مؤقت");}});
+        retry.setOnClickListener(v->startPlayback());
     }
-    private void initializePlayer(){
+    @Override public void surfaceCreated(SurfaceHolder holder){surfaceReady=true;startPlayback();}
+    @Override public void surfaceChanged(SurfaceHolder holder,int format,int width,int height){}
+    @Override public void surfaceDestroyed(SurfaceHolder holder){surfaceReady=false;release();}
+    private void startPlayback(){
+        if(!surfaceReady)return;
+        release();loading.setVisibility(View.VISIBLE);state.setText("جاري الاتصال بسيرفر البث...");
         try{
-            DefaultHttpDataSource.Factory http=new DefaultHttpDataSource.Factory().setConnectTimeoutMs(15000).setReadTimeoutMs(30000).setAllowCrossProtocolRedirects(true);
-            if(userAgent!=null&&!userAgent.isEmpty())http.setDefaultRequestProperty("User-Agent",userAgent);
-            http.setDefaultRequestProperty("Accept","*/*");
-            player=new ExoPlayer.Builder(this).setMediaSourceFactory(new DefaultMediaSourceFactory(this).setDataSourceFactory(http)).build();
-            playerView.setPlayer(player);
-            player.addListener(new Player.Listener(){
-                @Override public void onPlayerError(PlaybackException e){
-                    error.setVisibility(View.VISIBLE);error.setText("تعذر تشغيل البث: "+e.getErrorCodeName()+"\\nتحقق من الرابط أو صلاحية الوصول أو User-Agent.");
-                }
-            });
-            MediaItem.Builder item=new MediaItem.Builder().setUri(Uri.parse(streamUrl));
-            String path=Uri.parse(streamUrl).getPath();
-            if(path!=null&&path.toLowerCase().contains(".m3u8"))item.setMimeType(MimeTypes.APPLICATION_M3U8);
-            player.setMediaItem(item.build());player.prepare();player.play();
-        }catch(Exception e){error.setVisibility(View.VISIBLE);error.setText("خطأ في إعداد المشغل: "+e.getMessage());}
+            media=new MediaPlayer();media.setDisplay(surface.getHolder());
+            Map<String,String> headers=new HashMap<>();
+            if(userAgent!=null&&!userAgent.trim().isEmpty())headers.put("User-Agent",userAgent.trim());
+            headers.put("Accept","*/*");
+            media.setDataSource(this,Uri.parse(streamUrl),headers);
+            media.setOnPreparedListener(mp->{prepared=true;loading.setVisibility(View.GONE);state.setText("متصل — البث يعمل داخل التطبيق");playPause.setEnabled(true);if(shouldPlay){mp.start();playPause.setText("إيقاف مؤقت");}});
+            media.setOnBufferingUpdateListener((mp,percent)->state.setText("جاري التشغيل — تحميل "+percent+"%"));
+            media.setOnCompletionListener(mp->{state.setText("انتهى البث");playPause.setText("تشغيل");});
+            media.setOnErrorListener((mp,what,extra)->{prepared=false;loading.setVisibility(View.GONE);state.setText("تعذر تشغيل الرابط (رمز "+what+"/"+extra+"). قد لا يدعم الجهاز الترميز أو أن الرابط منتهي.");playPause.setEnabled(false);return true;});
+            media.prepareAsync();
+        }catch(Exception e){loading.setVisibility(View.GONE);state.setText("خطأ: "+e.getMessage());}
     }
-    @Override protected void onStop(){super.onStop();releasePlayer();}
-    @Override protected void onDestroy(){releasePlayer();super.onDestroy();}
-    private void releasePlayer(){if(player!=null){playerView.setPlayer(null);player.release();player=null;}}
+    private void release(){prepared=false;if(media!=null){try{media.reset();media.release();}catch(Exception ignored){}media=null;}if(playPause!=null)playPause.setEnabled(false);}
+    @Override protected void onPause(){super.onPause();if(media!=null&&media.isPlaying()){media.pause();shouldPlay=true;}}
+    @Override protected void onDestroy(){release();super.onDestroy();}
 }
