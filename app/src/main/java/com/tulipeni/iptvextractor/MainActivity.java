@@ -99,7 +99,7 @@ public class MainActivity extends Activity {
             TextView nm=text(ch.name,15,Color.rgb(100,255,160));nm.setTypeface(null,1);card.addView(nm);
             card.addView(text("المجموعة: "+ch.group,12,Color.LTGRAY));
             TextView link=text(ch.url,10,Color.GRAY);link.setMaxLines(2);link.setTextIsSelectable(true);card.addView(link,full());
-            card.setOnClickListener(v->{ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);cm.setPrimaryClip(ClipData.newPlainText("Stream URL",ch.url));Toast.makeText(this,"تم نسخ رابط البث",Toast.LENGTH_SHORT).show();});shown++;
+            card.setOnClickListener(v->{android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);cm.setPrimaryClip(ClipData.newPlainText("Stream URL",ch.url));Toast.makeText(this,"تم نسخ رابط البث",Toast.LENGTH_SHORT).show();});shown++;
         }
         if(shown==0){TextView empty=text(channels.isEmpty()?"لا توجد بيانات بعد.":"لا توجد نتائج مطابقة.",13,Color.LTGRAY);empty.setGravity(Gravity.CENTER);empty.setPadding(0,dp(20),0,dp(20));list.addView(empty);}
         count.setText("القنوات: "+channels.size()+" | المعروض: "+shown);
