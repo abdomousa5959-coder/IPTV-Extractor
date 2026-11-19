@@ -2,7 +2,7 @@ package com.tulipeni.iptvextractor;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.content.*;
+import android.content.*;\nimport android.net.Uri;
 import android.graphics.Color;
 import android.view.Gravity;
 import android.view.View;
@@ -12,10 +12,10 @@ import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.*;\nimport org.json.*;
 
 public class MainActivity extends Activity {
-    private static final String DEFAULT_URL="http://go8knm.optikl.ink/Go/playlist.m3u";
+    private static final String DEFAULT_URL="https://go8knm.optikl.ink/Os/api.php?action=category&cat_id=1";
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private EditText url,search;
     private TextView status,count;
@@ -76,6 +76,53 @@ public class MainActivity extends Activity {
             }catch(Exception e){runOnUiThread(()->{progress.setVisibility(View.GONE);status.setText("فشل الاستخراج: "+e.getMessage());});}
         });
     }
+    ArrayList<Channel> parseJson(String body)throws Exception{
+        JSONObject root=new JSONObject(body);
+        String state=root.optString("status","");
+        if(!state.isEmpty()&&!state.equalsIgnoreCase("success"))throw new IOException("API status: "+state);
+        JSONObject data=root.optJSONObject("data");
+        if(data==null)throw new IOException("استجابة JSON لا تحتوي على data");
+        String category=data.optString("name","Category");
+        JSONArray items=data.optJSONArray("items");
+        ArrayList<Channel> out=new ArrayList<>();
+        if(items==null)return out;
+        for(int i=0;i<items.length();i++){
+            JSONObject o=items.optJSONObject(i);if(o==null)continue;
+            String source=o.optString("source","");
+            if(source.isEmpty())source=o.optString("url","");
+            out.add(new Channel(o.optString("name","Item "+(i+1)),category,o.optString("image",""),source,
+                o.optString("id",""),o.optString("type",""),o.optString("download",""),
+                o.optString("player",""),o.optString("ddx",""),o.optString("agent","")));
+        }
+        return out;
+    }
+    String toM3u(ArrayList<Channel> items){
+        StringBuilder b=new StringBuilder("#EXTM3U\\n");
+        for(Channel ch:items){
+            b.append("#EXTINF:-1");
+            if(!ch.logo.isEmpty())b.append(" tvg-logo=\\\"").append(ch.logo).append("\\\"");
+            b.append(" group-title=\\\"").append(ch.group.replace("\\\"","")).append("\\\"").append(",").append(ch.name).append("\\n");
+            if(!ch.agent.isEmpty()){
+                String ua=ch.agent.replace("#EXTVLCOPT:http-user-agent=","").trim();
+                if(!ua.isEmpty())b.append("#EXTVLCOPT:http-user-agent=").append(ua).append("\\n");
+            }
+            b.append(ch.url).append("\\n");
+        }return b.toString();
+    }
+    void play(Channel ch){
+        if(ch.url==null||ch.url.isEmpty()){Toast.makeText(this,"لا يوجد رابط تشغيل لهذا العنصر",Toast.LENGTH_SHORT).show();return;}
+        try{
+            Intent vlc=new Intent(Intent.ACTION_VIEW);
+            vlc.setPackage("org.videolan.vlc");
+            vlc.setDataAndType(Uri.parse(ch.url),"video/*");
+            if(!ch.agent.isEmpty())vlc.putExtra("extra_headers","User-Agent: "+ch.agent.replace("#EXTVLCOPT:http-user-agent=","").trim());
+            if(vlc.resolveActivity(getPackageManager())!=null){startActivity(vlc);return;}
+            Intent generic=new Intent(Intent.ACTION_VIEW);
+            generic.setDataAndType(Uri.parse(ch.url),"application/x-mpegURL");
+            if(generic.resolveActivity(getPackageManager())!=null)startActivity(generic);
+            else Toast.makeText(this,"ثبت مشغل فيديو يدعم HLS مثل VLC",Toast.LENGTH_LONG).show();
+        }catch(Exception e){Toast.makeText(this,"تعذر فتح البث: "+e.getMessage(),Toast.LENGTH_LONG).show();}
+    }
     String read(InputStream in)throws IOException{
         if(in==null)return "";ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);return new String(out.toByteArray(),StandardCharsets.UTF_8);
     }
@@ -97,9 +144,20 @@ public class MainActivity extends Activity {
             if(!ch.name.toLowerCase(Locale.ROOT).contains(q)&&!ch.group.toLowerCase(Locale.ROOT).contains(q))continue;
             LinearLayout card=new LinearLayout(this);card.setOrientation(1);card.setPadding(dp(12),dp(10),dp(12),dp(10));card.setBackgroundColor(Color.rgb(18,31,25));LinearLayout.LayoutParams cp=full();cp.bottomMargin=dp(7);list.addView(card,cp);
             TextView nm=text(ch.name,15,Color.rgb(100,255,160));nm.setTypeface(null,1);card.addView(nm);
-            card.addView(text("المجموعة: "+ch.group,12,Color.LTGRAY));
-            TextView link=text(ch.url,10,Color.GRAY);link.setMaxLines(2);link.setTextIsSelectable(true);card.addView(link,full());
-            card.setOnClickListener(v->{android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);cm.setPrimaryClip(ClipData.newPlainText("Stream URL",ch.url));Toast.makeText(this,"تم نسخ رابط البث",Toast.LENGTH_SHORT).show();});shown++;
+            card.addView(text("المجموعة / التصنيف: "+ch.group+"   |   النوع: "+(ch.type.isEmpty()?"M3U":ch.type),12,Color.LTGRAY));
+            if(!ch.id.isEmpty())card.addView(text("ID: "+ch.id+"   |   Player: "+ch.player,11,Color.LTGRAY));
+            if(!ch.logo.isEmpty())card.addView(text("الصورة: "+ch.logo,10,Color.GRAY));
+            TextView link=text(ch.url,10,Color.GRAY);link.setMaxLines(3);link.setTextIsSelectable(true);card.addView(link,full());
+            if(!ch.download.isEmpty())card.addView(text("Download: "+ch.download,10,Color.GRAY));
+            if(!ch.ddx.isEmpty())card.addView(text("DDX: "+ch.ddx,10,Color.GRAY));
+            if(!ch.agent.isEmpty())card.addView(text("User-Agent: "+ch.agent,10,Color.GRAY));
+            LinearLayout actions=new LinearLayout(this);
+            Button play=button("▶ تشغيل"),copy=button("نسخ الرابط");
+            actions.addView(play,new LinearLayout.LayoutParams(0,dp(44),1));
+            LinearLayout.LayoutParams cpar=new LinearLayout.LayoutParams(0,dp(44),1);cpar.leftMargin=dp(7);actions.addView(copy,cpar);card.addView(actions,full());
+            play.setOnClickListener(v->play(ch));
+            copy.setOnClickListener(v->{android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);cm.setPrimaryClip(ClipData.newPlainText("Stream URL",ch.url));Toast.makeText(this,"تم نسخ رابط البث",Toast.LENGTH_SHORT).show();});
+            card.setOnClickListener(v->play(ch));shown++;
         }
         if(shown==0){TextView empty=text(channels.isEmpty()?"لا توجد بيانات بعد.":"لا توجد نتائج مطابقة.",13,Color.LTGRAY);empty.setGravity(Gravity.CENTER);empty.setPadding(0,dp(20),0,dp(20));list.addView(empty);}
         count.setText("القنوات: "+channels.size()+" | المعروض: "+shown);
