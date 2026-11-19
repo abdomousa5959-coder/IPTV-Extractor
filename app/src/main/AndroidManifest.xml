@@ -3,7 +3,7 @@
     <application android:allowBackup="false" android:label="IPTV Playlist Extractor"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:usesCleartextTraffic="true" android:supportsRtl="true">
-        <activity android:name=".MainActivity" android:exported="true">
+        <activity android:name=".PlayerActivity" android:exported="false" android:screenOrientation="sensor" />\n        <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
